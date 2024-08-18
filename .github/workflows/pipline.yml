@@ -1,0 +1,53 @@
+name: Deploy Cloud Functions
+on:
+  # mainへのPush時、または手動でワークフローを実行する
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+    
+
+jobs:
+  job_id:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCS_BUCKET_ID: "kaeru_sapiens"
+      BIGQUERY_DATASET_ID: pokemon
+      PUBSUB_TOPIC_ID: example    
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+
+      #github action認証
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER_ID}} # 作成したプロバイダのID
+          service_account: ${{ secrets.SERVICE_ACCOUNT_KEY }} # プロバイダで指定したサービスアカウント
+      - name: Validate authentication
+        run: gcloud auth list
+      - run: echo "🔒 google-github-actions/auth@v2 was successful"
+      
+      #Deploy Cloud Function
+      - name: Deploy Cloud Function
+        run: |
+          gcloud functions deploy main \
+            --runtime python39 \
+            --trigger-event google.storage.object.finalize \
+            --trigger-resource $GCS_BUCKET_ID \
+            --set-env-vars bucket_id=$GCS_BUCKET_ID,dataset_id=$BIGQUERY_DATASET_ID \
+            --entry-point main \
+            --timeout 120 \
+            --memory 256MB \
+            --region asia-northeast1 \
+            --gen2
+
+      - run: echo "🐋 Google Cloud deploy was successful"      
